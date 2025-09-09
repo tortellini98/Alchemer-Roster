@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Alchemer Roster</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; max-width: 760px; }
+    h1 { margin: 0 0 8px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .muted { color: #666; }
+    button { cursor: pointer; padding: 8px 12px; border-radius: 8px; border: 1px solid #ccc; background: #f8f8f8; }
+    input[type="text"] { padding: 8px; border: 1px solid #ccc; border-radius: 8px; min-width: 240px; }
+    .toggle { display: inline-flex; align-items: center; gap: 8px; }
+    .dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+    .dot.on { background: #2ecc71; }
+    .dot.off { background: #e74c3c; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; }
+    .status { font-weight: 600; }
+    .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; border:1px solid #eee; }
+  </style>
+</head>
+<body>
+  <h1>Alchemer Roster</h1>
+  <p class="muted">Add your name and toggle whether you’re currently active on Alchemer.</p>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:10px;">
+      <input type="text" id="nameInput" placeholder="Your name" />
+      <button id="saveNameBtn">Save name</button>
+      <span class="muted" id="whoami"></span>
+    </div>
+    <div class="row">
+      <label class="toggle">
+        <input type="checkbox" id="statusToggle" />
+        <span id="statusLabel">Alchemer: Logged Out</span>
+        <span id="statusDot" class="dot off"></span>
+      </label>
+      <span class="muted">Remember to toggle back to “Logged Out” before leaving.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 6px;">Current Roster</h3>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Status</th><th>Updated</th></tr>
+      </thead>
+      <tbody id="rosterBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Firebase Web SDK via CDN (no bundlers/tools needed) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp,
+      collection, onSnapshot, query, orderBy
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // ====== REPLACE THIS WITH YOUR CONFIG FROM THE CONSOLE ======
+const firebaseConfig = {
+  apiKey: "AIzaSyA1ln5FgnXCmuwxCupBy_VaDBaC3jyQC30",
+  authDomain: "alchemer-status.firebaseapp.com",
+  databaseURL: "https://alchemer-status-default-rtdb.firebaseio.com",
+  projectId: "alchemer-status",
+  storageBucket: "alchemer-status.firebasestorage.app",
+  messagingSenderId: "566870207856",
+  appId: "1:566870207856:web:b429110fb25c59916873b5"
+};
+    // ============================================================
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const nameInput = document.getElementById('nameInput');
+    const saveNameBtn = document.getElementById('saveNameBtn');
+    const statusToggle = document.getElementById('statusToggle');
+    const statusLabel = document.getElementById('statusLabel');
+    const statusDot   = document.getElementById('statusDot');
+    const whoami      = document.getElementById('whoami');
+    const rosterBody  = document.getElementById('rosterBody');
+
+    let uid = null;
+    let myDocRef = null;
+    let myActive = false;
+
+    const setUIFromDoc = (data) => {
+      if (!data) return;
+      if (typeof data.name === 'string') {
+        nameInput.value = data.name;
+        whoami.textContent = data.name ? `Signed in anonymously • You are: ${data.name}` : 'Signed in anonymously';
+      }
+      if (typeof data.active === 'boolean') {
+        myActive = data.active;
+        statusToggle.checked = myActive;
+        statusLabel.textContent = myActive ? 'Alchemer: Logged In' : 'Alchemer: Logged Out';
+        statusDot.className = 'dot ' + (myActive ? 'on' : 'off');
+      }
+    };
+
+    // Warn if leaving while still "Logged In"
+    window.addEventListener('beforeunload', (e) => {
+      if (myActive) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+// Save name (creates doc if needed, requires non-empty name)
+saveNameBtn.addEventListener('click', async () => {
+  try {
+    const name = nameInput.value.trim();
+    if (!name) { alert('Please enter a name'); return; }
+    if (!uid)   { alert('Still signing in… try again.'); return; }
+
+    // Create or update with a valid name
+    await setDoc(myDocRef, { name, active: false, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (err) {
+    console.error(err);
+    alert('Failed to save name: ' + (err?.message || err));
+  }
+});
+
+    // Toggle status
+    statusToggle.addEventListener('change', async (e) => {
+      if (!uid) { alert('Still signing in… try again.'); e.target.checked = !e.target.checked; return; }
+      myActive = !!e.target.checked;
+      await updateDoc(myDocRef, { active: myActive, updatedAt: serverTimestamp() });
+    });
+
+    // Roster listener
+    const rosterQuery = query(collection(db, 'users'), orderBy('name'));
+    onSnapshot(rosterQuery, (snap) => {
+      rosterBody.innerHTML = '';
+      snap.forEach(docSnap => {
+        const d = docSnap.data() || {};
+        const name = (d.name || '(unnamed)').toString();
+        const active = !!d.active;
+        const updated = d.updatedAt?.toDate ? d.updatedAt.toDate() : null;
+
+        const tr = document.createElement('tr');
+        const tdName = document.createElement('td');
+        const tdStatus = document.createElement('td');
+        const tdUpdated = document.createElement('td');
+
+        tdName.textContent = name;
+
+        const pill = document.createElement('span');
+        pill.className = 'pill';
+        const dot = document.createElement('span');
+        dot.className = 'dot ' + (active ? 'on' : 'off');
+        const text = document.createElement('span');
+        text.className = 'status';
+        text.textContent = active ? 'Logged In' : 'Logged Out';
+        pill.appendChild(dot); pill.appendChild(text);
+        tdStatus.appendChild(pill);
+
+        tdUpdated.textContent = updated ? updated.toLocaleString() : '—';
+
+        tr.appendChild(tdName); tr.appendChild(tdStatus); tr.appendChild(tdUpdated);
+        rosterBody.appendChild(tr);
+      });
+    });
+
+// Anonymous auth + personal doc
+signInAnonymously(auth).catch(console.error);
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) return;
+  uid = user.uid;
+  myDocRef = doc(db, 'users', uid);
+
+  try {
+    const snap = await getDoc(myDocRef);
+    if (snap.exists()) {
+      setUIFromDoc(snap.data());
+      onSnapshot(myDocRef, s => setUIFromDoc(s.data()));
+    } else {
+      // No doc yet — wait until user clicks "Save name"
+      whoami.textContent = 'Signed in anonymously';
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Failed to read your record: ' + (err?.message || err));
+  }
+});
+
+  </script>
+</body>
+</html>
