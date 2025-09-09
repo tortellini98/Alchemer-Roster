@@ -1,0 +1,23 @@
+name: Deploy to Firebase Hosting on push to main
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to Firebase Hosting (live)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ALCHEMER_STATUS }}
+          channelId: live
+          projectId: alchemer-status
+          # If you created additional Hosting "sites", uncomment and set a specific one:
+          # target: <YOUR_SITE_ID>
