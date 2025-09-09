@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "Alchemer-Roster/index.html",
+    "public": "alchemer-roster/hello.html",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
   }
 }
