@@ -1,0 +1,9 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Smoke Test</title></head>
+<body>
+  <h1>Hello from Firebase Hosting</h1>
+  <p>If you see this, hosting is serving the right file.</p>
+  <script type="module">
+    console.log("JS running");
+  </script>
+</body></html>
