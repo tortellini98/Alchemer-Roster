@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "alchemer-roster/hello.html",
+    "public": "https://alchemer-status.web.app/",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
   }
 }
